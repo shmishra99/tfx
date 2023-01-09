@@ -15,7 +15,6 @@
 
 import collections
 import itertools
-import time
 from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence
 import uuid
 
@@ -42,7 +41,6 @@ from ml_metadata import errors
 from ml_metadata.proto import metadata_store_pb2
 
 _EXECUTION_SET_SIZE = '__execution_set_size__'
-_EXECUTION_TIMESTAMP = '__execution_timestamp__'
 _EXTERNAL_EXECUTION_INDEX = '__external_execution_index__'
 
 
@@ -254,7 +252,8 @@ def get_executions(
     context_type = context_spec.type.name
     context_name = data_types_utils.get_value(context_spec.name)
     contexts.append(
-        f"(contexts_{i}.type = '{context_type}' AND contexts_{i}.name = '{context_name}')"
+        f"(contexts_{i}.type = '{context_type}' AND contexts_{i}.name ="
+        f" '{context_name}')"
     )
   filter_query = ' AND '.join(contexts)
   return metadata_handler.store.get_executions(
@@ -267,24 +266,24 @@ def get_latest_executions_set(
   """Returns latest set of executions, ascendingly ordered by __external_execution_index__.
 
   When _EXECUTION_SET_SIZE > 1 and there are retry executions, e.g., consider
-  the following executions with `__execution_set_size__ == 2`, which have the
-  same `__execution_timestamp__` but different `create_time_since_epoch`,
+  the following executions with `__execution_set_size__ == 2`, which have
+  different `create_time_since_epoch`,
 
       Execution(id=0, __external_execution_index__=0, state=FAILED,
-      __execution_timestamp__=1234, create_time_since_epoch=100)
+        create_time_since_epoch=100)
       Execution(id=1, __external_execution_index__=1, state=NEW,
-      __execution_timestamp__=1234, create_time_since_epoch=150)
+        create_time_since_epoch=150)
       Execution(id=2, __external_execution_index__=0, state=FAILED,
-      __execution_timestamp__=1234, create_time_since_epoch=200)
+        create_time_since_epoch=200)
       Execution(id=3, __external_execution_index__=0, state=FAILED,
-      __execution_timestamp__=1234, create_time_since_epoch=250)
+        create_time_since_epoch=250)
 
   This function returns the latest execution of each
   __external_execution_index__, which in this case will be:
       Execution(id=3, __external_execution_index__=0, state=FAILED,
-      __execution_timestamp__=1234, create_time_since_epoch=250)
+        create_time_since_epoch=250)
       Execution(id=1, __external_execution_index__=1, state=NEW,
-      __execution_timestamp__=1234, create_time_since_epoch=150)
+        create_time_since_epoch=150)
 
   Raises:
     RuntimeError: if the size of latest execution set is not
@@ -299,18 +298,13 @@ def get_latest_executions_set(
   if not size:
     return [sorted_executions[0]]
 
-  timestamp = sorted_executions[0].custom_properties.get(
-      _EXECUTION_TIMESTAMP).int_value
   sorted_execution_by_idx_map = collections.defaultdict(list)
   for e in sorted_executions:
     sorted_execution_by_idx_map[e.custom_properties[
         _EXTERNAL_EXECUTION_INDEX].int_value].append(e)
   latest_execution_set = []
   for idx in sorted(sorted_execution_by_idx_map.keys()):
-    # Only add executions with the same latest timestamp.
-    if sorted_execution_by_idx_map[idx][0].custom_properties[
-        _EXECUTION_TIMESTAMP].int_value == timestamp:
-      latest_execution_set.append(sorted_execution_by_idx_map[idx][0])
+    latest_execution_set.append(sorted_execution_by_idx_map[idx][0])
   if len(latest_execution_set) != size.int_value:
     raise RuntimeError('Expected the `latest_execution_set` to have exactly '
                        f'{size.int_value} executions, got '
@@ -331,18 +325,20 @@ def get_num_of_failures_from_failed_execution(
     failed_execution: A failed execution whose timestamp and external execution
     index will be tested against to count the total number of failed execution.
   """
-  target_timestamp = failed_execution.custom_properties[
-      _EXECUTION_TIMESTAMP].int_value
-  target_external_execution_index = failed_execution.custom_properties[
-      _EXTERNAL_EXECUTION_INDEX].int_value
-  # pylint: disable=g-complex-comprehension
-  return len([
-      e for e in executions
-      if (e.last_known_state == metadata_store_pb2.Execution.FAILED and
-          e.custom_properties[_EXECUTION_TIMESTAMP].int_value ==
-          target_timestamp and e.custom_properties[_EXTERNAL_EXECUTION_INDEX]
-          .int_value == target_external_execution_index)
-  ])
+  target_index = failed_execution.custom_properties[
+      _EXTERNAL_EXECUTION_INDEX
+  ].int_value
+
+  failed_executions = [
+      e
+      for e in executions
+      if (
+          e.last_known_state == metadata_store_pb2.Execution.FAILED
+          and e.custom_properties[_EXTERNAL_EXECUTION_INDEX].int_value
+          == target_index
+      )
+  ]
+  return len(failed_executions)
 
 
 def get_oldest_active_execution(
@@ -400,8 +396,6 @@ def register_retry_execution(
   # LINT.IfChange(retry_execution_custom_properties)
   retry_execution.custom_properties[_EXECUTION_SET_SIZE].CopyFrom(
       failed_execution.custom_properties[_EXECUTION_SET_SIZE])
-  retry_execution.custom_properties[_EXECUTION_TIMESTAMP].CopyFrom(
-      failed_execution.custom_properties[_EXECUTION_TIMESTAMP])
   retry_execution.custom_properties[_EXTERNAL_EXECUTION_INDEX].CopyFrom(
       failed_execution.custom_properties[
           _EXTERNAL_EXECUTION_INDEX])
@@ -442,7 +436,6 @@ def register_executions(
     A list of MLMD executions that are registered in MLMD, with id populated.
       All registered executions have a state of NEW.
   """
-  timestamp = int(time.time() * 1e6)
   executions = []
   for index, input_and_param in enumerate(input_and_params):
     # Prepare executions.
@@ -455,7 +448,6 @@ def register_executions(
     # LINT.IfChange(execution_custom_properties)
     execution.custom_properties[_EXECUTION_SET_SIZE].int_value = len(
         input_and_params)
-    execution.custom_properties[_EXECUTION_TIMESTAMP].int_value = timestamp
     execution.custom_properties[_EXTERNAL_EXECUTION_INDEX].int_value = index
     executions.append(execution)
   # LINT.ThenChange(:retry_execution_custom_properties)

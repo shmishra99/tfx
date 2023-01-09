@@ -131,7 +131,6 @@ class ImporterTaskSchedulerTest(test_utils.TfxTest):
 
       [execution
       ] = m.store.get_executions_by_id([self._importer_task.execution_id])
-      del execution.custom_properties['__execution_timestamp__']
       self.assertProtoPartiallyEquals(
           """
           last_known_state: COMPLETE
