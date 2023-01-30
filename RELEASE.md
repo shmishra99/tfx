@@ -6,6 +6,13 @@
 
 ### For Pipeline Authors
 
+*   `placeholder.Placeholder.placeholders_involved()` was replaced with
+    `placeholder.Placeholder.traverse()`.
+*   `placeholder.Predicate.dependent_channels()` was replaced with
+    `channel_utils.get_dependent_channels(Placeholder)`.
+*   `placeholder.Predicate.encode_with_keys(...)` was replaced with
+    `channel_utils.encode_placeholder_with_channels(Placeholder, ...)`.
+
 ### For Component Authors
 
 ## Deprecations
