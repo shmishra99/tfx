@@ -14,7 +14,7 @@
 """Lightweight wrapper for building MLMD filter query."""
 
 import collections
-from typing import Any, List, Union
+from typing import Union
 
 import ml_metadata as mlmd
 
@@ -44,17 +44,3 @@ class And(_ClauseList):
 
 class Or(_ClauseList):
   separator = 'OR'
-
-
-def to_sql_string(value: Union[bool, int, float, str, List[Any]]) -> str:
-  """Converts python value to appropriate GoogleSQL string."""
-  if isinstance(value, list):
-    inner = ', '.join(to_sql_string(v) for v in value)
-    return f'({inner})'
-  if isinstance(value, bool):
-    return 'TRUE' if value else 'FALSE'
-  if isinstance(value, (int, float)):
-    return str(value)
-  if isinstance(value, str):
-    return f'"{value}"'
-  raise NotImplementedError(f'Cannot convert {value} to SQL string.')
