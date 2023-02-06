@@ -16,7 +16,7 @@
 import collections
 import itertools
 import time
-from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple, Type
 import uuid
 
 from absl import logging
@@ -172,13 +172,16 @@ def resolve_exec_properties(
 
 def generate_resolved_info(
     mlmd_connection_manager: mlmd_cm.MLMDConnectionManager,
-    node: node_proto_view.NodeProtoView) -> ResolvedInfo:
+    node: node_proto_view.NodeProtoView,
+    skip_errors: Iterable[Type[exceptions.InputResolutionError]] = (),
+) -> ResolvedInfo:
   """Returns a `ResolvedInfo` object for executing the node or `None` to skip.
 
   Args:
     mlmd_connection_manager: MLMDConnectionManager instance for handling
       multiple mlmd db connections.
     node: The pipeline node for which to generate.
+    skip_errors: A list of errors to skip on the given error types.
 
   Returns:
     A `ResolvedInfo` with input resolutions. If execution should be skipped,
@@ -203,6 +206,10 @@ def generate_resolved_info(
     resolved_input_artifacts = inputs_utils.resolve_input_artifacts(
         metadata_handler=mlmd_connection_manager, pipeline_node=node)
   except exceptions.InputResolutionError as e:
+    for skip_error in skip_errors:
+      if isinstance(e, skip_error):
+        logging.info('[%s] Input resolution skipped: %s', node.node_info.id, e)
+        return ResolvedInfo(contexts=contexts, input_and_params=[])
     logging.exception('[%s] Input resolution error: %s', node.node_info.id, e)
     raise
   else:
